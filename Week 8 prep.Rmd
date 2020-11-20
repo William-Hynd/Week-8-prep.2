@@ -1,0 +1,153 @@
+---
+title: "Week 8 prep"
+author: "William Hynd"
+date: "19/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+#Install packages for the machine learning prep work
+##Magittr used to allow for use of the pipe function. 
+##Janitor is used to allow for janitor (cleaning) functions
+install.packages("palmerpenguins")
+install.packages("GGally")
+install.packages("Rtsne")
+install.packages("magrittr")
+install.packages("tidyr")
+library("palmerpenguins")
+library("dplyr")
+library("magrittr")
+library("janitor")
+library("tidyr")
+```
+
+
+
+```{r}
+#Tidying the data Frame and identifying then reducing the variables, 
+##Tidy the penguin data frame. 
+penguin <- penguins_raw %>%
+  janitor::clean_names()
+##To see the original data names
+str(penguins_raw)
+##Identify the 4 variables we are gonna use for this experiment
+#The use of the end with function allows R to search for variables which end in the same units. In this case mm, and will tabulate the data for these variables when placed within a summary. 
+penguin %>% 
+  select(body_mass_g,
+         ends_with("_mm")) %>%
+  summary()
+##There are some missing values within the data. Use is.na to remove them
+penguin <- penguin %>%
+  filter(!is.na(body_mass_g))
+##Currently the species species variable contains its common name and scientific name making the variable very long. Using extract we are going to split the common name and scientific name. 
+penguin <- penguin %>% 
+  extract(species, 
+          c("common_name", "scientific_name"),
+          "([a-zA-Z]+\\s[a-zA-Z]+)\\s\\(([a-zA-Z]+\\s[a-zA-Z]+)\\)")
+```
+
+```{r}
+##Overview of the dataset using GGally
+#Library GGally
+library(GGally)
+#Select the variables of interest using ggpairs
+penguin %>%
+  select(common_name, 
+         sex, 
+         island,
+         body_mass_g,
+         ends_with("_mm")) %>%
+  ggpairs(aes(color = common_name))
+```
+
+```{r}
+##Now conduct the PCR
+#This is done using the 4 selected variables from earlier being piped into prcomp which conducts the analysis
+pca <- penguin %>% 
+  select(body_mass_g,
+         ends_with("_mm")) %>%
+  prcomp(scale. = TRUE)
+#summary of PCA
+summary(pca)
+#Loading of each variable in each component will change the values we produce. Pcs ae linear combinations of the original variables.
+pca$rotation
+#To plot, we will use the scores produced on each of the new axes and have them coloured by species. The scores in a variable called $x
+pca_labelled <- data.frame(pca$x, common_name = penguin$common_name)
+#Then use this to create a scatterplot
+pca_labelled %>% 
+  ggplot(aes(x = PC1, y = PC2, color = common_name)) +
+  geom_point()
+```
+
+```{r}
+##Part 2 Analysis on the Rna Seq data
+#Import the rnaseq data set
+library("readr")
+file <- "scrna_data.csv"
+rna <- read_csv(file)
+#Huge data set, do not want to use GGally on this. 
+#Therefore we conduct a PCA
+pca <- rna %>% 
+  prcomp(scale. = TRUE)
+#Then consider the variance in the first 10 pc
+summary(pca)[["importance"]][,1:10]
+
+
+##Plot PC1 against PC2
+#Put scores into a data frame
+dat <-  data.frame(pca$x)
+#Plot PC1 against PC2
+ggplot(dat, aes(x = PC1, y = PC2)) +
+  geom_point()
+
+#The first two components capture very little variation in the cells, therefore it is worth looking at other pair wise comaprisons.
+#Compare the first 10 Pcs.
+dat %>%
+  select(PC1:PC10) %>% 
+  ggpairs()
+```
+
+```{r}
+###Using t-SNE
+#Install and library the Rtsne package
+library(Rtsne)
+#Perform t-SNE with the Rtsne function
+tsne <- rna %>% 
+  Rtsne(perplexity = 40,
+        check_duplicates = FALSE)
+#Perplexity can be altered - it is a smoothing of the number of neighbors
+#Put the t-SNE scores into a data frame
+dat <- data.frame(tsne$Y)
+#plot the first t-SNE dimension against the second
+dat %>% ggplot(aes(x = X1, y = X2)) +
+  geom_point(size=0.5)
+```
+
+
+```{r}
+###Conduct t-SNE analysis upon scrna.meta.csv 
+#Read in data. 
+file <- "scrna_meta.csv"
+meta <- read_csv(file)
+#For this data set there is a row called louvain, this is the clustering algorithm which was used on the data set. This column shows the cell names
+#Identify the cell names
+unique(meta$louvain)
+#Add the cell type to the t-SNE scores dataframe
+dat <- data.frame(dat, type = meta$louvain)
+#Replot the t-SNE cores coloured by cell type.
+dat %>% ggplot(aes(x = X1, y = X2, colour = type)) +
+  geom_point(size = 0.5)
+
+
+
+
+```
+
+
+
+
